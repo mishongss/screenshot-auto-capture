@@ -1,5 +1,5 @@
 import os
-from PyQt6.QtCore import Qt, pyqtSlot, QSize, QRect, QTimer
+from PyQt6.QtCore import Qt, pyqtSlot, QSize, QRect, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -13,7 +13,6 @@ from core.mouse_listener import GlobalMouseListener
 from ui.region_selector import RegionSelector
 from automation.pipeline import AutomationPipeline
 from automation.epub_builder import OCRToEpubBuilder
-from PyQt6.QtCore import QThread
 
 class EPUBWorker(QThread):
     progress_signal = pyqtSignal(int, int, str)
