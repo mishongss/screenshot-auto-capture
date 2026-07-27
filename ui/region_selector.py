@@ -200,6 +200,16 @@ class RegionSelector(QWidget):
         elif event.key() == Qt.Key.Key_Escape:
             self.hide()
 
+    def _get_confirm_button_rect(self, rect: QRect):
+        """[선택 완료] 버튼의 QRect 위치 구하기"""
+        btn_w, btn_h = 140, 32
+        x = rect.x() + (rect.width() - btn_w) // 2
+        y = rect.y() + rect.height() + 10
+        # 화면 아래로 벗어나는 경우 사각형 위쪽에 배치
+        if y + btn_h > self.height() - 10:
+            y = rect.y() - btn_h - 10
+        return QRect(x, y, btn_w, btn_h)
+
     def _confirm_selection(self):
         """선택 확정 처리 후 시그널 발신"""
         if self.selection_rect.isValid() and self.selection_rect.width() > 10 and self.selection_rect.height() > 10:
@@ -243,20 +253,28 @@ class RegionSelector(QWidget):
                 painter.drawRect(h_rect)
 
             # 크기 및 위치 안내 텍스트 표시
-            info_text = f" {rect.width()} x {rect.height()} px (Enter/더블클릭 완료) "
+            info_text = f" {rect.width()} x {rect.height()} px "
             painter.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
             
-            text_rect = QRect(rect.x(), rect.y() - 28 if rect.y() >= 30 else rect.y() + 5, 260, 24)
+            text_rect = QRect(rect.x(), rect.y() - 28 if rect.y() >= 30 else rect.y() + 5, 140, 24)
             painter.fillRect(text_rect, QColor(20, 30, 45, 220))
             painter.setPen(QColor(255, 255, 255))
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, info_text)
+
+            # [ ✅ 영역 선택 완료 ] 플로팅 버튼 렌더링
+            btn_rect = self._get_confirm_button_rect(rect)
+            painter.setBrush(QColor(0, 180, 120))
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            painter.drawRoundedRect(btn_rect, 6, 6)
+            painter.setFont(QFont("Malgun Gothic", 10, QFont.Weight.Bold))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, "✅ 영역 선택 완료")
 
         # 상단 안내 문구
         painter.setPen(QColor(255, 255, 255))
         painter.setFont(QFont("Malgun Gothic", 13, QFont.Weight.Bold))
         guide_msg = (
             "\n\n🖱️ 마우스로 사각형을 그리세요." if self.state == self.STATE_IDLE else
-            "\n\n📐 모서리 핸들로 크기 조정 / 사각형 안을 잡고 이동 가능  |  [Enter 키 또는 더블클릭] 선택 완료  |  [ESC] 취소"
+            "\n\n📐 모서리 핸들로 크기 조절 | 사각형 안을 잡고 이동 | [Enter 키] 또는 [아래 버튼 클릭] 선택 완료 | [ESC] 취소"
         )
         painter.drawText(
             self.rect(),
