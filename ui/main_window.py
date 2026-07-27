@@ -167,24 +167,24 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(14)
 
-        # (1) 저장 제목 및 위치 설정 그룹
-        grp_title = QGroupBox("1. 저장 제목 및 저장 위치(폴더) 지정")
+        # (1) 저장 제목 및 저장 위치(폴더) 지정 그룹
+        grp_title = QGroupBox("1. 저장 위치 및 제목 지정")
         layout_title = QVBoxLayout(grp_title)
         
-        lbl_dir_desc = QLabel("① 저장할 상위 위치(폴더)를 선택하세요:")
+        lbl_dir_desc = QLabel("① 캡처 이미지를 저장할 위치(폴더)를 선택하세요:")
         lbl_dir_desc.setStyleSheet("color: #a0aec0; font-size: 12px;")
         layout_title.addWidget(lbl_dir_desc)
 
         layout_base_dir = QHBoxLayout()
         self.txt_base_dir = QLineEdit(r"D:\77_Antigravity\screenshot")
-        self.txt_base_dir.setPlaceholderText("저장될 상위 디렉토리 경로 입력 또는 선택")
+        self.txt_base_dir.setPlaceholderText("선택된 저장 경로")
         self.txt_base_dir.editingFinished.connect(self._on_base_dir_apply)
-        layout_base_dir.addWidget(self.txt_base_dir)
+        layout_base_dir.addWidget(self.txt_base_dir, stretch=3)
 
-        self.btn_select_dir = QPushButton("📁 폴더 선택")
-        self.btn_select_dir.setStyleSheet("background-color: #1f334a; border: 1px solid #00d2ff; color: #00d2ff;")
+        self.btn_select_dir = QPushButton("📂 저장 폴더 선택 (탐색기)")
+        self.btn_select_dir.setStyleSheet("background-color: #1f334a; border: 1px solid #00d2ff; color: #00d2ff; font-weight: bold;")
         self.btn_select_dir.clicked.connect(self._browse_base_directory)
-        layout_base_dir.addWidget(self.btn_select_dir)
+        layout_base_dir.addWidget(self.btn_select_dir, stretch=2)
         layout_title.addLayout(layout_base_dir)
 
         lbl_title_desc = QLabel("② 프로젝트/캡처 제목을 입력하세요 (하위 폴더명):")
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
         self.txt_title = QLineEdit("스크린샷")
         self.txt_title.setPlaceholderText("제목 입력 후 엔터를 누르세요")
         self.txt_title.editingFinished.connect(self._on_title_apply)
-        layout_title_input.addWidget(self.txt_title)
+        layout_title_input.addWidget(self.txt_title, stretch=4)
 
         self.btn_apply_title = QPushButton("적용")
         self.btn_apply_title.setFixedWidth(60)
@@ -209,7 +209,7 @@ class MainWindow(QMainWindow):
         self.lbl_path.setStyleSheet("color: #00d2ff; font-size: 11px; font-weight: normal; margin-top: 4px;")
         layout_title.addWidget(self.lbl_path)
 
-        self.btn_open_folder = QPushButton("📂 최종 저장 폴더 열기 (탐색기)")
+        self.btn_open_folder = QPushButton("🔍 현재 저장 폴더 탐색기로 열기")
         self.btn_open_folder.clicked.connect(self._open_target_folder)
         layout_title.addWidget(self.btn_open_folder)
 
