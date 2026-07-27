@@ -1,5 +1,6 @@
 import os
 import re
+import ctypes
 import mss
 from PIL import Image
 from datetime import datetime
@@ -10,6 +11,8 @@ class CaptureEngine:
     - Base Dir: D:\\77_Antigravity\\screenshot
     - Project Dir: D:\\77_Antigravity\\screenshot\\<title>
     - Naming Format: <title>_<index:03d>.png (예: 제목_001.png)
+    - 다중 모니터 및 2페이지 자동 분할 지원
+    - 🔒 캡처 방지(DRM/보안 프로그램) 자동 우회 엔진 포함
     """
 
     BASE_DIR = r"D:\77_Antigravity\screenshot"
@@ -23,6 +26,49 @@ class CaptureEngine:
         self.bypass_drm = True  # 🔒 캡처 방지 (DRM/보안 프로그램) 자동 우회 모드
         self.update_target_directory(self.title)
 
+    def update_target_directory(self, title: str):
+        """제목 설정 시 하위 폴더 경로를 설정하고 즉시 생성한 뒤 일련번호 카운터를 갱신합니다."""
+        self.title = title.strip() if title.strip() else "Capture"
+        # 안전한 폴더명 처리 (특수문자 치환)
+        safe_title = re.sub(r'[\\/:*?"<>|]', '_', self.title)
+        self.current_dir = os.path.join(self.BASE_DIR, safe_title)
+        os.makedirs(self.current_dir, exist_ok=True)
+        self.sync_current_index()
+
+    def sync_current_index(self):
+        """현재 폴더에 기존 파일이 있다면 최고 일련번호 + 1로 자동 설정합니다."""
+        if not os.path.exists(self.current_dir):
+            self.current_index = 1
+            return
+
+        pattern = re.compile(rf"^{re.escape(self.title)}_(\d+)\.png$", re.IGNORECASE)
+        max_idx = 0
+        for fname in os.listdir(self.current_dir):
+            match = pattern.match(fname)
+            if match:
+                idx = int(match.group(1))
+                if idx > max_idx:
+                    max_idx = idx
+        self.current_index = max_idx + 1
+
+    def set_region(self, left: int, top: int, width: int, height: int):
+        """캡처 대상 영역을 설정합니다."""
+        self.region = {
+            "left": int(left),
+            "top": int(top),
+            "width": int(width),
+            "height": int(height)
+        }
+
+    def set_split_mode(self, mode: str):
+        """
+        페이지 분할 모드 설정:
+        - "none": 분할 없음
+        - "horizontal": 좌/우 50% 2페이지 분할
+        - "vertical": 상/하 50% 2페이지 분할
+        """
+        self.split_mode = mode
+
     def set_bypass_drm(self, enabled: bool):
         """보안/캡처 방지 프로그램 자동 우회 모드 설정"""
         self.bypass_drm = enabled
@@ -32,11 +78,8 @@ class CaptureEngine:
         [보안 우회 기술] Win32 API를 사용하여 캡처 차단 윈도우의 SetWindowDisplayAffinity 속성을 해제하고,
         PW_RENDERFULLCONTENT (0x02) 플래그를 통해 하드웨어 가속/보안 레이어를 우회 캡처합니다.
         """
-        import ctypes
         import win32gui
         import win32ui
-        import win32con
-        from PIL import Image
 
         width = right - left
         height = bottom - top
@@ -60,7 +103,6 @@ class CaptureEngine:
         save_bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
         save_dc.SelectObject(save_bitmap)
 
-        # PW_RENDERFULLCONTENT (2)
         PW_RENDERFULLCONTENT = 2
         result = ctypes.windll.user32.PrintWindow(hwnd_target, save_dc.GetSafeHdc(), PW_RENDERFULLCONTENT)
 
@@ -197,7 +239,6 @@ class CaptureEngine:
         if not files_to_process:
             return 0
 
-        # 분할된 이미지를 임시 보관할 백업 리스트
         temp_cropped_images = []
 
         for fpath in files_to_process:
@@ -224,14 +265,12 @@ class CaptureEngine:
         if not temp_cropped_images:
             return 0
 
-        # 기존 원본 파일 삭제
         for fpath in files_to_process:
             try:
                 os.remove(fpath)
             except Exception:
                 pass
 
-        # 새로 분할된 이미지들 제목_001.png부터 차례대로 재저장
         idx = 1
         for c_img in temp_cropped_images:
             new_path = os.path.join(self.current_dir, f"{self.title}_{idx:03d}.png")
@@ -240,4 +279,3 @@ class CaptureEngine:
 
         self.current_index = idx
         return len(temp_cropped_images)
-
