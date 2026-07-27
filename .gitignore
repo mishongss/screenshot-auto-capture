@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# User Captured Files & History Logs
+/The Future of geography/
+/Capture/
+/스크린샷/
+/강의노트/
+*.png
+*.jpg
+*.jpeg
+capture_history.json
+
+# Scratch & Temporary
+scratch/
