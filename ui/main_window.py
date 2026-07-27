@@ -5,13 +5,40 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QGroupBox, QSplitter,
     QCheckBox, QTextEdit, QMessageBox, QFrame, QSizePolicy, QComboBox,
-    QFileDialog
+    QFileDialog, QProgressBar
 )
 
 from core.capture_engine import CaptureEngine
 from core.mouse_listener import GlobalMouseListener
 from ui.region_selector import RegionSelector
 from automation.pipeline import AutomationPipeline
+from automation.epub_builder import OCRToEpubBuilder
+from PyQt6.QtCore import QThread
+
+class EPUBWorker(QThread):
+    progress_signal = pyqtSignal(int, int, str)
+    finished_signal = pyqtSignal(str, str)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, folder_path: str, title: str):
+        super().__init__()
+        self.folder_path = folder_path
+        self.title = title
+
+    def run(self):
+        try:
+            builder = OCRToEpubBuilder()
+            def _callback(curr, total, msg):
+                self.progress_signal.emit(curr, total, msg)
+
+            epub_path, txt_path = builder.convert_folder_to_epub(
+                folder_path=self.folder_path,
+                title=self.title,
+                progress_callback=_callback
+            )
+            self.finished_signal.emit(epub_path, txt_path)
+        except Exception as e:
+            self.error_signal.emit(str(e))
 
 DARK_STYLE = """
 QMainWindow {
@@ -326,8 +353,8 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(grp_gallery, stretch=3)
 
-        # (2) 추후 자동화 확장 개발 구역 (Automation Layer & Log)
-        grp_automation = QGroupBox("🤖 자동화 모듈 & 개발 구역 (Automation Pipeline)")
+        # (2) 추후 자동화 확장 개발 구역 (Automation Layer & EPUB Builder)
+        grp_automation = QGroupBox("🤖 자동화 모듈 & EPUB 전자책 변환기 (Automation & EPUB)")
         layout_auto = QVBoxLayout(grp_automation)
 
         layout_hooks = QHBoxLayout()
@@ -427,6 +454,69 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
         self.log("캡처 영역 지정 취소됨.")
+
+    def _start_epub_conversion(self):
+        """현재 캡처 폴더의 PNG 이미지들을 OCR 인식을 거쳐 EPUB 전자책으로 변환"""
+        folder_path = self.capture_engine.current_dir
+        title = self.capture_engine.title
+
+        if not folder_path or not os.path.exists(folder_path):
+            QMessageBox.warning(self, "경고", "캡처 폴더가 지정되지 않았거나 생성되지 않았습니다.")
+            return
+
+        if not title:
+            QMessageBox.warning(self, "경고", "프로젝트/캡처 제목을 먼저 입력해 주세요!")
+            return
+
+        # PNG 파일 존재 확인
+        pattern = re.compile(rf"^{re.escape(title)}_(\d+)\.png$", re.IGNORECASE)
+        has_png = any(pattern.match(f) or f.lower().endswith(".png") for f in os.listdir(folder_path))
+        if not has_png:
+            QMessageBox.warning(self, "경고", f"'{title}' 폴더에서 변환할 캡처 PNG 이미지를 찾지 못했습니다.")
+            return
+
+        self.btn_create_epub.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.log(f"📖 EPUB 전자책 변환 시작 -> 프로젝트: {title}")
+
+        self.epub_worker = EPUBWorker(folder_path, title)
+        self.epub_worker.progress_signal.connect(self._on_epub_progress)
+        self.epub_worker.finished_signal.connect(self._on_epub_finished)
+        self.epub_worker.error_signal.connect(self._on_epub_error)
+        self.epub_worker.start()
+
+    @pyqtSlot(int, int, str)
+    def _on_epub_progress(self, curr: int, total: int, msg: str):
+        if total > 0:
+            percent = int((curr / total) * 100)
+            self.progress_bar.setValue(percent)
+        self.log(msg)
+
+    @pyqtSlot(str, str)
+    def _on_epub_finished(self, epub_path: str, txt_path: str):
+        self.btn_create_epub.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        epub_fname = os.path.basename(epub_path)
+        txt_fname = os.path.basename(txt_path)
+        self.log(f"✅ EPUB 전자책 생성 성공! -> {epub_fname}")
+        self.log(f"📄 TXT 텍스트 파일 생성 성공! -> {txt_fname}")
+
+        reply = QMessageBox.question(
+            self,
+            "EPUB 전자책 생성 완료!",
+            f"전자책 생성 완료!\n\n- EPUB 파일: {epub_fname}\n- TXT 파일: {txt_fname}\n\n저장 폴더를 열어 확인하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._open_target_folder()
+
+    @pyqtSlot(str)
+    def _on_epub_error(self, err_msg: str):
+        self.btn_create_epub.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.log(f"❌ EPUB 변환 에러: {err_msg}")
+        QMessageBox.critical(self, "변환 실패", f"EPUB 전자책 변환 중 오류가 발생했습니다:\n{err_msg}")
 
     def _toggle_click_capture(self, checked: bool):
         if checked:
