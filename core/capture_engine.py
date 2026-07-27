@@ -82,8 +82,8 @@ class CaptureEngine:
 
     def capture_screen(self) -> list:
         """
-        보안 뷰어가 감지하지 못하는 Windows DWM / PIL 전역 GPU 캡처 방식으로
-        원본 화면을 카메라 X 아이콘 없이 깨끗하게 캡처합니다.
+        PyQt QScreen grabWindow API를 사용하여 다중 모니터 및 DPI 배율 환경에서도
+        빈 화면 현상 없이 실제 눈에 보이는 화면 그대로 100% 선명하게 캡처합니다.
         """
         if not self.region or self.region["width"] <= 0 or self.region["height"] <= 0:
             raise ValueError("캡처 영역이 지정되지 않았거나 유효하지 않습니다.")
@@ -99,20 +99,36 @@ class CaptureEngine:
 
         full_img = None
 
-        # 1차 시도: PIL ImageGrab (all_screens=True) -> 보안 뷰어가 API 호출을 감지하지 못하는 표준 DWM 디스플레이 복사 방식
+        # 1차 시도: PyQt QScreen.grabWindow (윈도우 가상 멀티모니터 & DPI 배율 완벽 대응)
         try:
-            full_img = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
+            from PyQt6.QtGui import QGuiApplication
+            from PyQt6.QtCore import QBuffer, QIODevice
+            import io
+
+            screen = QGuiApplication.primaryScreen()
+            pixmap = screen.grabWindow(0, left, top, width, height)
+            
+            if not pixmap.isNull():
+                buffer = QBuffer()
+                buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+                pixmap.save(buffer, "PNG")
+                raw_bytes = buffer.data().data()
+                full_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
         except Exception:
             full_img = None
 
-        # 2차 시도: mss 고속 디스플레이 프레임 버퍼 복사
+        # 2차 시도 (Fallback): PIL ImageGrab (all_screens=True)
         if full_img is None:
             try:
-                with mss.mss() as sct:
-                    sct_img = sct.grab(self.region)
-                    full_img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                full_img = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
             except Exception:
                 full_img = None
+
+        # 3차 시도 (Fallback): mss 사용
+        if full_img is None:
+            with mss.mss() as sct:
+                sct_img = sct.grab(self.region)
+                full_img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
         saved_paths = []
         w, h = full_img.size
