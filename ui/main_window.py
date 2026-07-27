@@ -1,6 +1,6 @@
 import os
-from PyQt6.QtCore import Qt, pyqtSlot, QSize, QRect
-from PyQt6.QtGui import QIcon, QPixmap, QFont
+from PyQt6.QtCore import Qt, pyqtSlot, QSize, QRect, QTimer
+from PyQt6.QtGui import QIcon, QPixmap, QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QGroupBox, QSplitter,
@@ -116,6 +116,15 @@ class MainWindow(QMainWindow):
         self.resize(1000, 680)
         self.setStyleSheet(DARK_STYLE)
 
+        # 자동 타이머 초기화 (2초 간격 캡처)
+        self.auto_timer = QTimer(self)
+        self.auto_timer.setInterval(2000)
+        self.auto_timer.timeout.connect(self._do_capture)
+
+        # F9 캡처 단축키 설정
+        self.shortcut_f9 = QShortcut(QKeySequence("F9"), self)
+        self.shortcut_f9.activated.connect(self._do_capture)
+
         # 코어 엔진 및 인스턴스 초기화
         self.capture_engine = CaptureEngine(title="스크린샷")
         self.mouse_listener = GlobalMouseListener(cooldown_sec=0.25)
@@ -204,8 +213,8 @@ class MainWindow(QMainWindow):
 
         left_layout.addWidget(grp_region)
 
-        # (3) 캡처 실행 & 2페이지 자동 분할 설정 그룹
-        grp_capture = QGroupBox("3. 캡처 실행 & 2페이지 자동 분할 설정")
+        # (3) 캡처 실행 & 2페이지 자동 분할 및 캡처 모드 그룹
+        grp_capture = QGroupBox("3. 캡처 실행 & 보안 뷰어 감지 회피 캡처 모드")
         layout_capture = QVBoxLayout(grp_capture)
 
         lbl_split_desc = QLabel("📄 페이지 분할 설정 (2면으로 된 화면 캡처 시):")
@@ -234,19 +243,28 @@ class MainWindow(QMainWindow):
         """)
         layout_capture.addWidget(self.cbo_split_mode)
 
-        lbl_cap_desc = QLabel("마우스 좌클릭 시 지정된 영역을 설정한 방식으로 연속 캡처합니다.")
-        lbl_cap_desc.setWordWrap(True)
-        lbl_cap_desc.setStyleSheet("color: #a0aec0; font-size: 11px; margin-top: 6px;")
-        layout_capture.addWidget(lbl_cap_desc)
+        # 캡처 방식 선택 (마우스 클릭 / 타이머 자동 캡처 / 단축키 캡처)
+        lbl_mode_desc = QLabel("🔒 보안 뷰어(E-book Reader) 차단 회피 캡처 방식:")
+        lbl_mode_desc.setStyleSheet("color: #ffb86c; font-size: 11px; font-weight: bold; margin-top: 8px;")
+        layout_capture.addWidget(lbl_mode_desc)
 
-        self.btn_capture_toggle = QPushButton("🖱️ 마우스 좌클릭 캡처 활성화 (OFF)")
+        layout_modes = QHBoxLayout()
+        self.btn_capture_toggle = QPushButton("🖱️ 마우스 좌클릭 캡처")
         self.btn_capture_toggle.setObjectName("btnCaptureToggle")
         self.btn_capture_toggle.setCheckable(True)
         self.btn_capture_toggle.toggled.connect(self._toggle_click_capture)
-        layout_capture.addWidget(self.btn_capture_toggle)
+        layout_modes.addWidget(self.btn_capture_toggle)
+
+        self.btn_timer_capture = QPushButton("⏱️ 2초 간격 자동 연속 캡처 (추천)")
+        self.btn_timer_capture.setCheckable(True)
+        self.btn_timer_capture.setStyleSheet("background-color: #1f334a; border: 1px solid #00d2ff; color: #00d2ff;")
+        self.btn_timer_capture.toggled.connect(self._toggle_timer_capture)
+        layout_modes.addWidget(self.btn_timer_capture)
+
+        layout_capture.addLayout(layout_modes)
 
         layout_btns = QHBoxLayout()
-        self.btn_single_capture = QPushButton("📸 1회 즉시 캡처")
+        self.btn_single_capture = QPushButton("📸 1회 즉시 캡처 (F9 단축키)")
         self.btn_single_capture.clicked.connect(self._do_capture)
         layout_btns.addWidget(self.btn_single_capture)
 
@@ -361,15 +379,42 @@ class MainWindow(QMainWindow):
                 self.btn_capture_toggle.setChecked(False)
                 return
             
+            # 타이머 캡처가 켜져 있으면 끔
+            if self.btn_timer_capture.isChecked():
+                self.btn_timer_capture.setChecked(False)
+
             self.mouse_listener.set_active(True)
-            self.btn_capture_toggle.setText("🛑 마우스 좌클릭 캡처 중지 (ON)")
-            self.lbl_status.setText("🟢 마우스 좌클릭 캡처 진행 중... 화면 클릭 시 캡처됩니다.")
+            self.btn_capture_toggle.setText("🛑 좌클릭 캡처 중지")
+            self.lbl_status.setText("🟢 마우스 좌클릭 캡처 진행 중...")
             self.log("마우스 좌클릭 연속 캡처 활성화됨.")
         else:
             self.mouse_listener.set_active(False)
-            self.btn_capture_toggle.setText("🖱️ 마우스 좌클릭 캡처 활성화 (OFF)")
+            self.btn_capture_toggle.setText("🖱️ 마우스 좌클릭 캡처")
             self.lbl_status.setText("🔴 마우스 좌클릭 캡처 중지됨.")
             self.log("마우스 좌클릭 연속 캡처 비활성화됨.")
+
+    def _toggle_timer_capture(self, checked: bool):
+        if checked:
+            if not self.capture_engine.region:
+                QMessageBox.warning(self, "경고", "먼저 캡처 영역을 지정해 주세요!")
+                self.btn_timer_capture.setChecked(False)
+                return
+            
+            # 마우스 좌클릭 캡처가 켜져 있으면 끔 (보안 감지 회피)
+            if self.btn_capture_toggle.isChecked():
+                self.btn_capture_toggle.setChecked(False)
+
+            self.auto_timer.start()
+            self.btn_timer_capture.setText("🛑 2초 자동 캡처 중지")
+            self.btn_timer_capture.setStyleSheet("background-color: #701c23; border: 1px solid #a82e38; color: #ff7682;")
+            self.lbl_status.setText("⏱️ 2초 간격 자동 연속 캡처 진행 중... (보안 뷰어 회피 특화)")
+            self.log("⏱️ 2초 간격 자동 연속 캡처 활성화됨.")
+        else:
+            self.auto_timer.stop()
+            self.btn_timer_capture.setText("⏱️ 2초 간격 자동 연속 캡처 (추천)")
+            self.btn_timer_capture.setStyleSheet("background-color: #1f334a; border: 1px solid #00d2ff; color: #00d2ff;")
+            self.lbl_status.setText("🔴 자동 타이머 캡처 중지됨.")
+            self.log("자동 타이머 캡처 비활성화됨.")
 
     @pyqtSlot(int, int)
     def _on_left_click_triggered(self, click_x: int, click_y: int):
