@@ -27,25 +27,15 @@ class OCRToEpubBuilder:
             self._reader = easyocr.Reader(['ko', 'en'], gpu=False)
         return self._reader
 
-    def convert_folder_to_epub(self, folder_path: str, title: str, progress_callback: Optional[Callable[[int, int, str], None]] = None) -> tuple[str, str]:
+    def convert_images_to_epub(self, image_paths: list[str], title: str, progress_callback: Optional[Callable[[int, int, str], None]] = None) -> tuple[str, str]:
         """
-        :param folder_path: PNG 이미지들이 저장된 디렉토리 경로
+        :param image_paths: 사용자가 갤러리에서 선택한 PNG 이미지 파일들의 절대 경로 리스트
         :param title: 전자책 제목
         :param progress_callback: (현재 index, 전체 count, 메시지) 형태의 진행 상황 콜백
         :return: (생성된 epub 파일 절대 경로, 생성된 txt 파일 절대 경로)
         """
-        if not os.path.exists(folder_path):
-            raise FileNotFoundError(f"지정된 폴더를 찾을 수 없습니다: {folder_path}")
-
-        # PNG 캡처 파일 목록 추출 및 숫자에 따른 정렬
-        pattern = re.compile(rf"^{re.escape(title)}_(\d+)\.png$", re.IGNORECASE)
-        png_files = []
-        for fname in sorted(os.listdir(folder_path)):
-            if pattern.match(fname) or fname.lower().endswith(".png"):
-                png_files.append(os.path.join(folder_path, fname))
-
-        if not png_files:
-            raise ValueError(f"'{title}' 폴더에서 캡처된 PNG 이미지를 찾지 못했습니다.")
+        if not image_paths:
+            raise ValueError("선택된 이미지가 없습니다.")
 
         reader = self._get_ocr_reader()
 
@@ -58,7 +48,7 @@ class OCRToEpubBuilder:
 
         chapters = []
         full_text_list = []
-        total_files = len(png_files)
+        total_files = len(image_paths)
 
         # 기본 CSS 스타일 추가
         style = '''
@@ -155,3 +145,23 @@ class OCRToEpubBuilder:
             progress_callback(total_files, total_files, f"EPUB 및 TXT 전자책 변환 완료! -> {epub_filename}")
 
         return epub_filepath, txt_filepath
+
+    def convert_folder_to_epub(self, folder_path: str, title: str, progress_callback: Optional[Callable[[int, int, str], None]] = None) -> tuple[str, str]:
+        """
+        :param folder_path: PNG 이미지들이 저장된 디렉토리 경로
+        :param title: 전자책 제목
+        :param progress_callback: 진행 상황 콜백
+        """
+        if not os.path.exists(folder_path):
+            raise FileNotFoundError(f"지정된 폴더를 찾을 수 없습니다: {folder_path}")
+
+        pattern = re.compile(rf"^{re.escape(title)}_(\d+)\.png$", re.IGNORECASE)
+        png_files = []
+        for fname in sorted(os.listdir(folder_path)):
+            if pattern.match(fname) or fname.lower().endswith(".png"):
+                png_files.append(os.path.join(folder_path, fname))
+
+        if not png_files:
+            raise ValueError(f"'{title}' 폴더에서 캡처된 PNG 이미지를 찾지 못했습니다.")
+
+        return self.convert_images_to_epub(png_files, title, progress_callback)

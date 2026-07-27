@@ -19,9 +19,9 @@ class EPUBWorker(QThread):
     finished_signal = pyqtSignal(str, str)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, folder_path: str, title: str):
+    def __init__(self, image_paths: list[str], title: str):
         super().__init__()
-        self.folder_path = folder_path
+        self.image_paths = image_paths
         self.title = title
 
     def run(self):
@@ -30,8 +30,8 @@ class EPUBWorker(QThread):
             def _callback(curr, total, msg):
                 self.progress_signal.emit(curr, total, msg)
 
-            epub_path, txt_path = builder.convert_folder_to_epub(
-                folder_path=self.folder_path,
+            epub_path, txt_path = builder.convert_images_to_epub(
+                image_paths=self.image_paths,
                 title=self.title,
                 progress_callback=_callback
             )
@@ -338,8 +338,25 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(14)
 
         # (1) 최근 캡처 갤러리
-        grp_gallery = QGroupBox("캡처된 화면 갤러리 (저장 포맷: 제목_001.png)")
+        grp_gallery = QGroupBox("캡처 이미지 선택 갤러리 (원하는 캡처본을 체크하여 EPUB 생성)")
         layout_gallery = QVBoxLayout(grp_gallery)
+
+        # 갤러리 상단 전체선택/해제/삭제 버튼
+        layout_gal_ctrl = QHBoxLayout()
+        self.btn_select_all = QPushButton("☑️ 전체 선택")
+        self.btn_select_all.clicked.connect(self._select_all_gallery)
+        layout_gal_ctrl.addWidget(self.btn_select_all)
+
+        self.btn_deselect_all = QPushButton("☐ 전체 해제")
+        self.btn_deselect_all.clicked.connect(self._deselect_all_gallery)
+        layout_gal_ctrl.addWidget(self.btn_deselect_all)
+
+        self.btn_delete_selected = QPushButton("🗑️ 선택 항목 삭제")
+        self.btn_delete_selected.setStyleSheet("color: #ff7682;")
+        self.btn_delete_selected.clicked.connect(self._delete_selected_gallery_items)
+        layout_gal_ctrl.addWidget(self.btn_delete_selected)
+
+        layout_gallery.addLayout(layout_gal_ctrl)
 
         self.list_gallery = QListWidget()
         self.list_gallery.setIconSize(QSize(160, 100))
@@ -348,6 +365,7 @@ class MainWindow(QMainWindow):
         self.list_gallery.setMovement(QListWidget.Movement.Static)
         self.list_gallery.setSpacing(8)
         self.list_gallery.itemDoubleClicked.connect(self._open_file)
+        self.list_gallery.itemChanged.connect(self._update_selected_count_label)
         layout_gallery.addWidget(self.list_gallery)
 
         right_layout.addWidget(grp_gallery, stretch=3)
@@ -436,10 +454,11 @@ class MainWindow(QMainWindow):
     def _on_base_dir_apply(self):
         path = self.txt_base_dir.text().strip()
         if not path:
-            path = r"D:\77_Antigravity\screenshot"
+            path = r"D:\77_Antigravity\screenshot\rowdata"
             self.txt_base_dir.setText(path)
         self.capture_engine.set_base_directory(path)
         self._update_folder_info()
+        self._load_folder_gallery()
         self.log(f"저장 상위 폴더 변경 완료 -> {path}")
 
     def _on_title_apply(self):
@@ -447,6 +466,7 @@ class MainWindow(QMainWindow):
         if text:
             self.capture_engine.update_target_directory(text)
             self._update_folder_info()
+            self._load_folder_gallery()
             self.log(f"저장 제목/폴더 설정 완료: {text}")
         else:
             self.log("제목을 입력해 주세요.")
@@ -492,32 +512,99 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self.log("캡처 영역 지정 취소됨.")
 
-    def _start_epub_conversion(self):
-        """현재 캡처 폴더의 PNG 이미지들을 OCR 인식을 거쳐 EPUB 전자책으로 변환"""
-        folder_path = self.capture_engine.current_dir
-        title = self.capture_engine.title
+    def _select_all_gallery(self):
+        for i in range(self.list_gallery.count()):
+            item = self.list_gallery.item(i)
+            item.setCheckState(Qt.CheckState.Checked)
+        self._update_selected_count_label()
 
-        if not folder_path or not os.path.exists(folder_path):
-            QMessageBox.warning(self, "경고", "캡처 폴더가 지정되지 않았거나 생성되지 않았습니다.")
+    def _deselect_all_gallery(self):
+        for i in range(self.list_gallery.count()):
+            item = self.list_gallery.item(i)
+            item.setCheckState(Qt.CheckState.Unchecked)
+        self._update_selected_count_label()
+
+    def _delete_selected_gallery_items(self):
+        selected_items = []
+        for i in range(self.list_gallery.count()):
+            item = self.list_gallery.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                selected_items.append(item)
+
+        if not selected_items:
+            QMessageBox.information(self, "안내", "삭제할 이미지를 선택(체크)해 주세요.")
             return
 
+        reply = QMessageBox.question(
+            self,
+            "선택 항목 삭제 확인",
+            f"선택하신 {len(selected_items)}개의 캡처 이미지 및 실제 파일을 정말 삭제하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            for item in selected_items:
+                fpath = item.data(Qt.ItemDataRole.UserRole)
+                if fpath and os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+                row = self.list_gallery.row(item)
+                self.list_gallery.takeItem(row)
+            self.log(f"선택한 {len(selected_items)}개의 캡처 이미지를 삭제했습니다.")
+            self._update_selected_count_label()
+
+    def _get_checked_image_paths(self) -> list[str]:
+        """갤러리에서 체크된 이미지 파일들의 경로를 순서대로 정렬하여 반환"""
+        checked_paths = []
+        for i in range(self.list_gallery.count()):
+            item = self.list_gallery.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                fpath = item.data(Qt.ItemDataRole.UserRole)
+                if fpath and os.path.exists(fpath):
+                    checked_paths.append(fpath)
+        # 파일명 숫자 기준 오름차순 정렬 (제목_001.png, 제목_002.png...)
+        return sorted(checked_paths)
+
+    def _update_selected_count_label(self, item=None):
+        checked_paths = self._get_checked_image_paths()
+        count = len(checked_paths)
+        total = self.list_gallery.count()
+        self.btn_create_epub.setText(f"📖 선택한 이미지({count}/{total}개) EPUB 전자책 생성")
+
+    def _load_folder_gallery(self):
+        """현재 지정된 저장 폴더에 있는 이미지들을 갤러리로 읽어들이기"""
+        self.list_gallery.clear()
+        folder_path = self.capture_engine.current_dir
+        title = self.capture_engine.title
+        if folder_path and os.path.exists(folder_path) and title:
+            pattern = re.compile(rf"^{re.escape(title)}_(\d+)\.png$", re.IGNORECASE)
+            png_files = []
+            for fname in sorted(os.listdir(folder_path)):
+                if pattern.match(fname) or fname.lower().endswith(".png"):
+                    png_files.append(os.path.join(folder_path, fname))
+            for fpath in png_files:
+                self._add_gallery_item(fpath)
+        self._update_selected_count_label()
+
+    def _start_epub_conversion(self):
+        """갤러리에서 선택(체크)한 이미지들만 읽어서 OCR 및 EPUB 전자책으로 변환"""
+        title = self.capture_engine.title
         if not title:
             QMessageBox.warning(self, "경고", "프로젝트/캡처 제목을 먼저 입력해 주세요!")
             return
 
-        # PNG 파일 존재 확인
-        pattern = re.compile(rf"^{re.escape(title)}_(\d+)\.png$", re.IGNORECASE)
-        has_png = any(pattern.match(f) or f.lower().endswith(".png") for f in os.listdir(folder_path))
-        if not has_png:
-            QMessageBox.warning(self, "경고", f"'{title}' 폴더에서 변환할 캡처 PNG 이미지를 찾지 못했습니다.")
+        checked_paths = self._get_checked_image_paths()
+        if not checked_paths:
+            QMessageBox.warning(self, "경고", "EPUB으로 변환할 캡처 이미지를 갤러리에서 1개 이상 선택(체크)해 주세요!")
             return
 
         self.btn_create_epub.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.log(f"📖 EPUB 전자책 변환 시작 -> 프로젝트: {title}")
+        self.log(f"📖 EPUB 전자책 변환 시작 -> 선택된 이미지 {len(checked_paths)}개 (프로젝트: {title})")
 
-        self.epub_worker = EPUBWorker(folder_path, title)
+        self.epub_worker = EPUBWorker(checked_paths, title)
         self.epub_worker.progress_signal.connect(self._on_epub_progress)
         self.epub_worker.finished_signal.connect(self._on_epub_finished)
         self.epub_worker.error_signal.connect(self._on_epub_error)
@@ -676,7 +763,12 @@ class MainWindow(QMainWindow):
         item.setIcon(QIcon(pixmap.scaled(160, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)))
         item.setData(Qt.ItemDataRole.UserRole, filepath)
 
+        # 체크박스 기능 활성화 및 기본 선택
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked)
+
         self.list_gallery.insertItem(0, item)
+        self._update_selected_count_label()
 
     def _open_file(self, item: QListWidgetItem):
         filepath = item.data(Qt.ItemDataRole.UserRole)
