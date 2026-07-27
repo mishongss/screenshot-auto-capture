@@ -356,6 +356,44 @@ class MainWindow(QMainWindow):
         grp_automation = QGroupBox("🤖 자동화 모듈 & EPUB 전자책 변환기 (Automation & EPUB)")
         layout_auto = QVBoxLayout(grp_automation)
 
+        # 📖 EPUB 전자책 변환 버튼
+        layout_epub_btn = QHBoxLayout()
+        self.btn_create_epub = QPushButton("📖 캡처 이미지 OCR 텍스트 추출 ➡️ EPUB 전자책 생성")
+        self.btn_create_epub.setStyleSheet("""
+            QPushButton {
+                background-color: #2b4c7e;
+                border: 1px solid #4a7bb0;
+                color: #ffffff;
+                font-weight: bold;
+                padding: 10px 14px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #3b64a5;
+                border-color: #00d2ff;
+            }
+        """)
+        self.btn_create_epub.clicked.connect(self._start_epub_conversion)
+        layout_epub_btn.addWidget(self.btn_create_epub)
+        layout_auto.addLayout(layout_epub_btn)
+
+        # 변환 진행률 프로그레스 바
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #2e3545;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #0d1017;
+                color: #ffffff;
+            }
+            QProgressBar::chunk {
+                background-color: #00d2ff;
+            }
+        """)
+        layout_auto.addWidget(self.progress_bar)
+
         layout_hooks = QHBoxLayout()
         self.chk_json_hook = QCheckBox("자동 메타데이터 JSON 기록 (hooks.py)")
         self.chk_json_hook.setChecked(True)
