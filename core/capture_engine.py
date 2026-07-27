@@ -14,32 +14,35 @@ class CaptureEngine:
     - 보안 뷰어(E-book Reader, DRM) 감지 차단 방지 DWM 하드웨어 캡처 엔진
     """
 
-    DEFAULT_BASE_DIR = r"D:\77_Antigravity\screenshot"
+    DEFAULT_BASE_DIR = r"D:\77_Antigravity\screenshot\rowdata"
 
-    def __init__(self, title: str = "Capture", base_dir: str = None):
-        self.title = title.strip() if title.strip() else "Capture"
+    def __init__(self, title: str = "", base_dir: str = None):
+        self.title = title.strip()
         self.base_dir = base_dir if base_dir else self.DEFAULT_BASE_DIR
         self.current_dir = ""
         self.current_index = 1
         self.region = None  # (left, top, width, height)
         self.split_mode = "none"  # "none", "horizontal" (좌/우 분할), "vertical" (상/하 분할)
         self.bypass_drm = False
-        self.update_target_directory(self.title, self.base_dir)
+        if self.title:
+            self.update_target_directory(self.title, self.base_dir)
 
     def set_base_directory(self, base_dir: str):
         """저장 상위 폴더 위치를 변경합니다."""
         if base_dir and base_dir.strip():
             self.base_dir = base_dir.strip()
-            self.update_target_directory(self.title, self.base_dir)
+            if self.title:
+                self.update_target_directory(self.title, self.base_dir)
 
     def update_target_directory(self, title: str, base_dir: str = None):
-        """제목 및 상위 폴더 설정 시 하위 폴더 경로를 설정하고 즉시 생성한 뒤 일련번호 카운터를 갱신합니다."""
+        """제목 및 상위 폴더 설정 시 경로만 갱신하고 일련번호 카운터를 확인합니다 (실제 폴더 생성은 캡처 시점에 수행)."""
         if base_dir:
             self.base_dir = base_dir.strip()
-        self.title = title.strip() if title.strip() else "Capture"
+        self.title = title.strip()
+        if not self.title:
+            return
         safe_title = re.sub(r'[\\/:*?"<>|]', '_', self.title)
         self.current_dir = os.path.join(self.base_dir, safe_title)
-        os.makedirs(self.current_dir, exist_ok=True)
         self.sync_current_index()
 
     def sync_current_index(self):
@@ -85,6 +88,9 @@ class CaptureEngine:
         PyQt QScreen grabWindow API를 사용하여 다중 모니터 및 DPI 배율 환경에서도
         빈 화면 현상 없이 실제 눈에 보이는 화면 그대로 100% 선명하게 캡처합니다.
         """
+        if not self.title:
+            raise ValueError("저장할 프로젝트/캡처 제목을 먼저 입력해 주세요!")
+
         if not self.region or self.region["width"] <= 0 or self.region["height"] <= 0:
             raise ValueError("캡처 영역이 지정되지 않았거나 유효하지 않습니다.")
 

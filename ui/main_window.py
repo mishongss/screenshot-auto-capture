@@ -126,8 +126,8 @@ class MainWindow(QMainWindow):
         self.shortcut_f9 = QShortcut(QKeySequence("F9"), self)
         self.shortcut_f9.activated.connect(self._do_capture)
 
-        # 코어 엔진 및 인스턴스 초기화
-        self.capture_engine = CaptureEngine(title="스크린샷")
+        # 코어 엔진 및 인스턴스 초기화 (기본 제목을 비워두어 불필요한 폴더 생성 방지)
+        self.capture_engine = CaptureEngine(title="", base_dir=r"D:\77_Antigravity\screenshot\rowdata")
         self.mouse_listener = GlobalMouseListener(cooldown_sec=0.25)
         self.region_selector = RegionSelector()
         self.automation_pipeline = AutomationPipeline()
@@ -171,13 +171,13 @@ class MainWindow(QMainWindow):
         grp_title = QGroupBox("1. 저장 위치 및 제목 지정")
         layout_title = QVBoxLayout(grp_title)
         
-        lbl_dir_desc = QLabel("① 캡처 이미지를 저장할 위치(폴더)를 선택하세요:")
+        lbl_dir_desc = QLabel("① 캡처 이미지가 저장될 상위 위치(폴더):")
         lbl_dir_desc.setStyleSheet("color: #a0aec0; font-size: 12px;")
         layout_title.addWidget(lbl_dir_desc)
 
         layout_base_dir = QHBoxLayout()
-        self.txt_base_dir = QLineEdit(r"D:\77_Antigravity\screenshot")
-        self.txt_base_dir.setPlaceholderText("선택된 저장 경로")
+        self.txt_base_dir = QLineEdit(r"D:\77_Antigravity\screenshot\rowdata")
+        self.txt_base_dir.setPlaceholderText("저장 상위 경로")
         self.txt_base_dir.editingFinished.connect(self._on_base_dir_apply)
         layout_base_dir.addWidget(self.txt_base_dir, stretch=3)
 
@@ -187,13 +187,13 @@ class MainWindow(QMainWindow):
         layout_base_dir.addWidget(self.btn_select_dir, stretch=2)
         layout_title.addLayout(layout_base_dir)
 
-        lbl_title_desc = QLabel("② 프로젝트/캡처 제목을 입력하세요 (하위 폴더명):")
+        lbl_title_desc = QLabel("② 프로젝트/캡처 제목을 입력하세요 (하위 폴더명으로 생성됨):")
         lbl_title_desc.setStyleSheet("color: #a0aec0; font-size: 12px; margin-top: 6px;")
         layout_title.addWidget(lbl_title_desc)
 
         layout_title_input = QHBoxLayout()
-        self.txt_title = QLineEdit("스크린샷")
-        self.txt_title.setPlaceholderText("제목 입력 후 엔터를 누르세요")
+        self.txt_title = QLineEdit("")
+        self.txt_title.setPlaceholderText("저장 제목 입력 (예: 베르나르베르베르, 강의노트 등)")
         self.txt_title.editingFinished.connect(self._on_title_apply)
         layout_title_input.addWidget(self.txt_title, stretch=4)
 
@@ -379,24 +379,33 @@ class MainWindow(QMainWindow):
 
     def _on_title_apply(self):
         text = self.txt_title.text().strip()
-        if not text:
-            text = "스크린샷"
-            self.txt_title.setText(text)
-        self.capture_engine.update_target_directory(text)
-        self._update_folder_info()
-        self.log(f"저장 제목/폴더 변경 완료: {text}")
+        if text:
+            self.capture_engine.update_target_directory(text)
+            self._update_folder_info()
+            self.log(f"저장 제목/폴더 설정 완료: {text}")
+        else:
+            self.log("제목을 입력해 주세요.")
 
     def _open_target_folder(self):
         folder_path = self.capture_engine.current_dir
-        if os.path.exists(folder_path):
+        if folder_path and os.path.exists(folder_path):
             os.startfile(folder_path)
             self.log(f"저장 폴더 열기 -> {folder_path}")
         else:
-            QMessageBox.information(self, "안내", "저장 폴더가 아직 생성되지 않았습니다.")
+            base_dir = self.capture_engine.base_dir
+            if os.path.exists(base_dir):
+                os.startfile(base_dir)
+                self.log(f"상위 저장 폴더 열기 -> {base_dir}")
+            else:
+                QMessageBox.information(self, "안내", "저장 폴더가 아직 생성되지 않았습니다.")
 
     def _update_folder_info(self):
-        self.lbl_path.setText(f"📂 저장 경로:\n{self.capture_engine.current_dir}")
-        self.lbl_status.setText(f"다음 저장 파일: {self.capture_engine.title}_{self.capture_engine.current_index:03d}.png")
+        if self.capture_engine.current_dir:
+            self.lbl_path.setText(f"📂 저장 경로:\n{self.capture_engine.current_dir}")
+            self.lbl_status.setText(f"다음 저장 파일: {self.capture_engine.title}_{self.capture_engine.current_index:03d}.png")
+        else:
+            self.lbl_path.setText(f"📂 기본 저장 상위 경로:\n{self.capture_engine.base_dir}")
+            self.lbl_status.setText("프로젝트/캡처 제목을 입력하신 후 캡처를 시작하세요.")
 
     def _open_region_selector(self):
         self.hide()
