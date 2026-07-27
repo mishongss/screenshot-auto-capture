@@ -14,22 +14,31 @@ class CaptureEngine:
     - 보안 뷰어(E-book Reader, DRM) 감지 차단 방지 DWM 하드웨어 캡처 엔진
     """
 
-    BASE_DIR = r"D:\77_Antigravity\screenshot"
+    DEFAULT_BASE_DIR = r"D:\77_Antigravity\screenshot"
 
-    def __init__(self, title: str = "Capture"):
+    def __init__(self, title: str = "Capture", base_dir: str = None):
         self.title = title.strip() if title.strip() else "Capture"
+        self.base_dir = base_dir if base_dir else self.DEFAULT_BASE_DIR
         self.current_dir = ""
         self.current_index = 1
         self.region = None  # (left, top, width, height)
         self.split_mode = "none"  # "none", "horizontal" (좌/우 분할), "vertical" (상/하 분할)
-        self.bypass_drm = False  # 보안 프로그램이 PrintWindow를 감지하여 카메라X를 띄우는 것을 막기 위해 기본값 False로 설정
-        self.update_target_directory(self.title)
+        self.bypass_drm = False
+        self.update_target_directory(self.title, self.base_dir)
 
-    def update_target_directory(self, title: str):
-        """제목 설정 시 하위 폴더 경로를 설정하고 즉시 생성한 뒤 일련번호 카운터를 갱신합니다."""
+    def set_base_directory(self, base_dir: str):
+        """저장 상위 폴더 위치를 변경합니다."""
+        if base_dir and base_dir.strip():
+            self.base_dir = base_dir.strip()
+            self.update_target_directory(self.title, self.base_dir)
+
+    def update_target_directory(self, title: str, base_dir: str = None):
+        """제목 및 상위 폴더 설정 시 하위 폴더 경로를 설정하고 즉시 생성한 뒤 일련번호 카운터를 갱신합니다."""
+        if base_dir:
+            self.base_dir = base_dir.strip()
         self.title = title.strip() if title.strip() else "Capture"
         safe_title = re.sub(r'[\\/:*?"<>|]', '_', self.title)
-        self.current_dir = os.path.join(self.BASE_DIR, safe_title)
+        self.current_dir = os.path.join(self.base_dir, safe_title)
         os.makedirs(self.current_dir, exist_ok=True)
         self.sync_current_index()
 

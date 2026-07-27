@@ -4,7 +4,8 @@ from PyQt6.QtGui import QIcon, QPixmap, QFont, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QGroupBox, QSplitter,
-    QCheckBox, QTextEdit, QMessageBox, QFrame, QSizePolicy, QComboBox
+    QCheckBox, QTextEdit, QMessageBox, QFrame, QSizePolicy, QComboBox,
+    QFileDialog
 )
 
 from core.capture_engine import CaptureEngine
@@ -166,12 +167,28 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(14)
 
-        # (1) 제목 입력 그룹
-        grp_title = QGroupBox("1. 저장 제목 및 위치 설정")
+        # (1) 저장 제목 및 위치 설정 그룹
+        grp_title = QGroupBox("1. 저장 제목 및 저장 위치(폴더) 지정")
         layout_title = QVBoxLayout(grp_title)
         
-        lbl_title_desc = QLabel("프로젝트/캡처 제목을 입력하세요 (엔터 또는 [적용] 시 폴더 생성):")
-        lbl_title_desc.setStyleSheet("color: #a0aec0; font-size: 12px;")
+        lbl_dir_desc = QLabel("① 저장할 상위 위치(폴더)를 선택하세요:")
+        lbl_dir_desc.setStyleSheet("color: #a0aec0; font-size: 12px;")
+        layout_title.addWidget(lbl_dir_desc)
+
+        layout_base_dir = QHBoxLayout()
+        self.txt_base_dir = QLineEdit(r"D:\77_Antigravity\screenshot")
+        self.txt_base_dir.setPlaceholderText("저장될 상위 디렉토리 경로 입력 또는 선택")
+        self.txt_base_dir.editingFinished.connect(self._on_base_dir_apply)
+        layout_base_dir.addWidget(self.txt_base_dir)
+
+        self.btn_select_dir = QPushButton("📁 폴더 선택")
+        self.btn_select_dir.setStyleSheet("background-color: #1f334a; border: 1px solid #00d2ff; color: #00d2ff;")
+        self.btn_select_dir.clicked.connect(self._browse_base_directory)
+        layout_base_dir.addWidget(self.btn_select_dir)
+        layout_title.addLayout(layout_base_dir)
+
+        lbl_title_desc = QLabel("② 프로젝트/캡처 제목을 입력하세요 (하위 폴더명):")
+        lbl_title_desc.setStyleSheet("color: #a0aec0; font-size: 12px; margin-top: 6px;")
         layout_title.addWidget(lbl_title_desc)
 
         layout_title_input = QHBoxLayout()
@@ -189,10 +206,10 @@ class MainWindow(QMainWindow):
 
         self.lbl_path = QLabel()
         self.lbl_path.setWordWrap(True)
-        self.lbl_path.setStyleSheet("color: #00d2ff; font-size: 11px; font-weight: normal;")
+        self.lbl_path.setStyleSheet("color: #00d2ff; font-size: 11px; font-weight: normal; margin-top: 4px;")
         layout_title.addWidget(self.lbl_path)
 
-        self.btn_open_folder = QPushButton("📂 저장 폴더 열기 (탐색기)")
+        self.btn_open_folder = QPushButton("📂 최종 저장 폴더 열기 (탐색기)")
         self.btn_open_folder.clicked.connect(self._open_target_folder)
         layout_title.addWidget(self.btn_open_folder)
 
@@ -338,6 +355,27 @@ class MainWindow(QMainWindow):
         self.txt_log.append(f"[{os.path.basename(self.capture_engine.current_dir)}] {text}")
         sb = self.txt_log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _browse_base_directory(self):
+        """파일 탐색기를 통해 저장 상위 디렉토리를 사용자가 직접 선택"""
+        current = self.txt_base_dir.text().strip()
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "캡처 파일이 저장될 상위 폴더 선택",
+            current if os.path.exists(current) else r"D:\77_Antigravity\screenshot"
+        )
+        if selected_dir:
+            self.txt_base_dir.setText(selected_dir)
+            self._on_base_dir_apply()
+
+    def _on_base_dir_apply(self):
+        path = self.txt_base_dir.text().strip()
+        if not path:
+            path = r"D:\77_Antigravity\screenshot"
+            self.txt_base_dir.setText(path)
+        self.capture_engine.set_base_directory(path)
+        self._update_folder_info()
+        self.log(f"저장 상위 폴더 변경 완료 -> {path}")
 
     def _on_title_apply(self):
         text = self.txt_title.text().strip()
