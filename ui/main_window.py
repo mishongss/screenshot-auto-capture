@@ -137,6 +137,7 @@ class MainWindow(QMainWindow):
 
         # 이벤트 시그널 연결
         self.region_selector.region_selected.connect(self._on_region_selected)
+        self.region_selector.selection_canceled.connect(self._on_region_canceled)
         self.mouse_listener.left_clicked.connect(self._on_left_click_triggered)
         self.mouse_listener.log_message.connect(self.log)
 
@@ -414,10 +415,18 @@ class MainWindow(QMainWindow):
     @pyqtSlot(int, int, int, int)
     def _on_region_selected(self, x, y, width, height):
         self.show()
+        self.raise_()
+        self.activateWindow()
         self.capture_engine.set_region(x, y, width, height)
         self.lbl_region_info.setText(f"현재 영역: X={x}, Y={y}, W={width}, H={height}")
-        self.log(f"캡처 영역 설정됨 -> X:{x}, Y:{y}, W:{width}, H:{height}")
-        self.lbl_status.setText("캡처 영역 설정 완료. 좌클릭 캡처를 활성화하세요.")
+        self.log(f"캡처 영역 설정 완료 -> X:{x}, Y:{y}, W:{width}, H:{height}")
+        self.lbl_status.setText("캡처 영역 설정 완료. 캡처 모드를 선택해 주세요.")
+
+    def _on_region_canceled(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.log("캡처 영역 지정 취소됨.")
 
     def _toggle_click_capture(self, checked: bool):
         if checked:

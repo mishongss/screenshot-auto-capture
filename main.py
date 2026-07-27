@@ -14,6 +14,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Antigravity Screen Capture & Automation")
+    app.setQuitOnLastWindowClosed(False)  # 오버레이 전환 시 애플리케이션 자동 종료 차단
 
     window = MainWindow()
     window.show()

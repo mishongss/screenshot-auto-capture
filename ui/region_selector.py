@@ -12,6 +12,7 @@ class RegionSelector(QWidget):
     - [ESC] 키로 취소
     """
     region_selected = pyqtSignal(int, int, int, int)  # x, y, width, height
+    selection_canceled = pyqtSignal()  # 취소 시그널
 
     # 핸들 크기 및 위치 정의
     HANDLE_SIZE = 8
@@ -199,6 +200,7 @@ class RegionSelector(QWidget):
             self._confirm_selection()
         elif event.key() == Qt.Key.Key_Escape:
             self.hide()
+            self.selection_canceled.emit()
 
     def _get_confirm_button_rect(self, rect: QRect):
         """[선택 완료] 버튼의 QRect 위치 구하기"""
