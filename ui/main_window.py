@@ -204,15 +204,14 @@ class MainWindow(QMainWindow):
 
         left_layout.addWidget(grp_region)
 
-        # (3) 캡처 실행 & 2페이지 자동 분할 및 DRM 우회 옵션 그룹
-        grp_capture = QGroupBox("3. 캡처 실행 & 2페이지 분할 / 캡처 방지(DRM) 우회 설정")
+        # (3) 캡처 실행 & 2페이지 자동 분할 설정 그룹
+        grp_capture = QGroupBox("3. 캡처 실행 & 2페이지 자동 분할 설정")
         layout_capture = QVBoxLayout(grp_capture)
 
-        lbl_split_desc = QLabel("📄 페이지 분할 및 보안 우회 옵션:")
+        lbl_split_desc = QLabel("📄 페이지 분할 설정 (2면으로 된 화면 캡처 시):")
         lbl_split_desc.setStyleSheet("color: #a0aec0; font-size: 11px;")
         layout_capture.addWidget(lbl_split_desc)
 
-        layout_options = QHBoxLayout()
         self.cbo_split_mode = QComboBox()
         self.cbo_split_mode.addItem("1페이지 단일 캡처 (분할 없음)", "none")
         self.cbo_split_mode.addItem("↔️ 좌/우 2페이지 자동 분할 (Left/Right 50%)", "horizontal")
@@ -233,16 +232,7 @@ class MainWindow(QMainWindow):
                 selection-background-color: #00d2ff;
             }
         """)
-        layout_options.addWidget(self.cbo_split_mode, stretch=2)
-
-        self.chk_bypass_drm = QCheckBox("🔒 캡처 방지(DRM) 우회 모드")
-        self.chk_bypass_drm.setChecked(True)
-        self.chk_bypass_drm.setToolTip("인강, DRM, 보안 프로그램으로 인해 검은 화면으로 캡처되는 것을 프로그램이 자동으로 우회합니다.")
-        self.chk_bypass_drm.toggled.connect(self._toggle_bypass_drm)
-        self.chk_bypass_drm.setStyleSheet("color: #ffb86c; font-weight: bold; font-size: 12px;")
-        layout_options.addWidget(self.chk_bypass_drm, stretch=1)
-
-        layout_capture.addLayout(layout_options)
+        layout_capture.addWidget(self.cbo_split_mode)
 
         lbl_cap_desc = QLabel("마우스 좌클릭 시 지정된 영역을 설정한 방식으로 연속 캡처합니다.")
         lbl_cap_desc.setWordWrap(True)
@@ -396,10 +386,6 @@ class MainWindow(QMainWindow):
         self.capture_engine.set_split_mode(mode)
         mode_text = self.cbo_split_mode.currentText()
         self.log(f"페이지 분할 모드 변경 -> {mode_text}")
-
-    def _toggle_bypass_drm(self, checked: bool):
-        self.capture_engine.set_bypass_drm(checked)
-        self.log(f"보안/캡처 방지(DRM) 자동 우회 모드 -> {'켜짐 (ON)' if checked else '꺼짐 (OFF)'}")
 
     def _split_existing_images(self):
         """현재 폴더에 있는 2페이지짜리 캡처 이미지를 1페이지씩 쪼개기"""

@@ -1,8 +1,7 @@
 import os
 import re
-import ctypes
 import mss
-from PIL import Image
+from PIL import Image, ImageGrab
 from datetime import datetime
 
 class CaptureEngine:
@@ -11,8 +10,8 @@ class CaptureEngine:
     - Base Dir: D:\\77_Antigravity\\screenshot
     - Project Dir: D:\\77_Antigravity\\screenshot\\<title>
     - Naming Format: <title>_<index:03d>.png (예: 제목_001.png)
-    - 다중 모니터 및 2페이지 자동 분할 지원
-    - 🔒 캡처 방지(DRM/보안 프로그램) 자동 우회 엔진 포함
+    - 다중 모니터, 2페이지 자동 분할 지원
+    - 보안 뷰어(E-book Reader, DRM) 감지 차단 방지 DWM 하드웨어 캡처 엔진
     """
 
     BASE_DIR = r"D:\77_Antigravity\screenshot"
@@ -23,13 +22,12 @@ class CaptureEngine:
         self.current_index = 1
         self.region = None  # (left, top, width, height)
         self.split_mode = "none"  # "none", "horizontal" (좌/우 분할), "vertical" (상/하 분할)
-        self.bypass_drm = True  # 🔒 캡처 방지 (DRM/보안 프로그램) 자동 우회 모드
+        self.bypass_drm = False  # 보안 프로그램이 PrintWindow를 감지하여 카메라X를 띄우는 것을 막기 위해 기본값 False로 설정
         self.update_target_directory(self.title)
 
     def update_target_directory(self, title: str):
         """제목 설정 시 하위 폴더 경로를 설정하고 즉시 생성한 뒤 일련번호 카운터를 갱신합니다."""
         self.title = title.strip() if title.strip() else "Capture"
-        # 안전한 폴더명 처리 (특수문자 치환)
         safe_title = re.sub(r'[\\/:*?"<>|]', '_', self.title)
         self.current_dir = os.path.join(self.BASE_DIR, safe_title)
         os.makedirs(self.current_dir, exist_ok=True)
@@ -73,69 +71,10 @@ class CaptureEngine:
         """보안/캡처 방지 프로그램 자동 우회 모드 설정"""
         self.bypass_drm = enabled
 
-    def _bypass_window_affinity_and_grab(self, left: int, top: int, right: int, bottom: int):
-        """
-        [보안 우회 기술] Win32 API를 사용하여 캡처 차단 윈도우의 SetWindowDisplayAffinity 속성을 해제하고,
-        PW_RENDERFULLCONTENT (0x02) 플래그를 통해 하드웨어 가속/보안 레이어를 우회 캡처합니다.
-        """
-        import win32gui
-        import win32ui
-
-        width = right - left
-        height = bottom - top
-
-        # 1. 캡처 대상 좌표에 위치한 윈도우 핸들(HWND) 구하기
-        hwnd = win32gui.WindowFromPoint((left + width // 2, top + height // 2))
-        if hwnd:
-            try:
-                # 윈도우의 DisplayAffinity 캡처 차단 마스크(WDA_EXCLUDEFROMCAPTURE=0x11)를 WDA_NONE(0)으로 강제 해제
-                ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, 0)
-            except Exception:
-                pass
-
-        # 2. PW_RENDERFULLCONTENT (0x00000002) 플래그를 이용한 Direct Framebuffer 복사
-        hwnd_target = win32gui.GetDesktopWindow()
-        hwnd_dc = win32gui.GetWindowDC(hwnd_target)
-        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-        save_dc = mfc_dc.CreateCompatibleDC()
-
-        save_bitmap = win32ui.CreateBitmap()
-        save_bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
-        save_dc.SelectObject(save_bitmap)
-
-        PW_RENDERFULLCONTENT = 2
-        result = ctypes.windll.user32.PrintWindow(hwnd_target, save_dc.GetSafeHdc(), PW_RENDERFULLCONTENT)
-
-        if result == 1:
-            bmpinfo = save_bitmap.GetInfo()
-            bmpstr = save_bitmap.GetBitmapBits(True)
-            img = Image.frombuffer(
-                'RGB',
-                (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
-                bmpstr, 'raw', 'BGRX', 0, 1
-            )
-            # 수거 리소스 해제
-            win32gui.DeleteObject(save_bitmap.GetHandle())
-            save_dc.DeleteDC()
-            mfc_dc.DeleteDC()
-            win32gui.ReleaseDC(hwnd_target, hwnd_dc)
-
-            # 데스크톱 전체에서 해당 지정 영역 크롭
-            if img.size[0] >= right and img.size[1] >= bottom and left >= 0 and top >= 0:
-                return img.crop((left, top, right, bottom))
-            return img
-
-        # 리소스 해제
-        win32gui.DeleteObject(save_bitmap.GetHandle())
-        save_dc.DeleteDC()
-        mfc_dc.DeleteDC()
-        win32gui.ReleaseDC(hwnd_target, hwnd_dc)
-        return None
-
     def capture_screen(self) -> list:
         """
-        설정된 영역을 캡처하고 (다중 모니터 및 DRM 우회 지원), 분할 모드에 따라 1개 또는 2개의 파일로 저장합니다.
-        반환값: 저장된 이미지 파일들의 절대 경로 리스트
+        보안 뷰어가 감지하지 못하는 Windows DWM / PIL 전역 GPU 캡처 방식으로
+        원본 화면을 카메라 X 아이콘 없이 깨끗하게 캡처합니다.
         """
         if not self.region or self.region["width"] <= 0 or self.region["height"] <= 0:
             raise ValueError("캡처 영역이 지정되지 않았거나 유효하지 않습니다.")
@@ -151,26 +90,20 @@ class CaptureEngine:
 
         full_img = None
 
-        # 1차 시도 (DRM/보안 캡처 우회 모드인 경우)
-        if self.bypass_drm:
-            try:
-                full_img = self._bypass_window_affinity_and_grab(left, top, right, bottom)
-            except Exception:
-                full_img = None
+        # 1차 시도: PIL ImageGrab (all_screens=True) -> 보안 뷰어가 API 호출을 감지하지 못하는 표준 DWM 디스플레이 복사 방식
+        try:
+            full_img = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
+        except Exception:
+            full_img = None
 
-        # 2차 시도: PIL ImageGrab (all_screens=True -> Windows 다중 모니터 전역 지원)
+        # 2차 시도: mss 고속 디스플레이 프레임 버퍼 복사
         if full_img is None:
             try:
-                from PIL import ImageGrab
-                full_img = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
+                with mss.mss() as sct:
+                    sct_img = sct.grab(self.region)
+                    full_img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
             except Exception:
                 full_img = None
-
-        # 3차 시도 (Fallback): mss 사용
-        if full_img is None:
-            with mss.mss() as sct:
-                sct_img = sct.grab(self.region)
-                full_img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
         saved_paths = []
         w, h = full_img.size
@@ -223,8 +156,7 @@ class CaptureEngine:
     def split_existing_folder_images(self, split_direction: str = "horizontal") -> int:
         """
         현재 폴더에 이미 저장되어 있는 2페이지 캡처 이미지들을 일괄 1페이지씩 쪼개어
-        새로운 순차 일련번호로 재정렬 저장하는 백업/분할 유틸리티입니다.
-        반환값: 새로 생성된 분할 파일 개수
+        새로운 순차 일련번호로 재정렬 저장하는 유틸리티.
         """
         if not os.path.exists(self.current_dir):
             return 0
