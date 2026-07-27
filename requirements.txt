@@ -4,6 +4,3 @@ Pillow>=10.0.0
 pynput>=1.7.6
 pywin32>=306
 dxcam>=0.3.0
-ebooklib>=0.20
-easyocr>=1.7.0
-beautifulsoup4>=4.12.0
